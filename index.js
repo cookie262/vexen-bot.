@@ -679,3 +679,4 @@ process.on('SIGINT', () => {
 });
 
 client.login(config.token);
+
