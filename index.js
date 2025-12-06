@@ -1,6 +1,13 @@
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const VexenDatabase = require('./database');
 const config = require('./config');
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Bot is running!');
+});
 
 const client = new Client({
   intents: [
@@ -659,6 +666,10 @@ client.on('interactionCreate', async (interaction) => {
     console.error(error);
     await interaction.reply({ content: 'An error occurred while executing this command.', ephemeral: true });
   }
+});
+
+app.listen(port, () => {
+  console.log(`Web server running on port ${port}`);
 });
 
 process.on('SIGINT', () => {
