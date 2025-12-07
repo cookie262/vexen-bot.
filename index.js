@@ -1,6 +1,7 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const VexenDatabase = require('./database');
 const config = require('./config');
+const { basicAI, creativeAI, technicalAI } = require('./ai');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,36 +24,24 @@ const db = new VexenDatabase();
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Bot Owner ID: ${config.ownerId}`);
   client.application.commands.set([
-    // Moderation commands
+    // MODERATION COMMANDS
     {
-      name: 'warn',
-      description: 'Warn a user',
+      name: 'kick',
+      description: 'Kick a user from the server',
       options: [
-        { type: 6, name: 'user', description: 'The user to warn', required: true },
-        { type: 3, name: 'reason', description: 'Reason for the warning', required: false }
-      ]
-    },
-    {
-      name: 'checkwarns',
-      description: 'Check warnings for a user',
-      options: [
-        { type: 6, name: 'user', description: 'The user to check (optional)', required: false }
-      ]
-    },
-    {
-      name: 'removewarn',
-      description: 'Remove a specific warning',
-      options: [
-        { type: 4, name: 'warnid', description: 'The warning ID to remove', required: true }
+        { type: 6, name: 'user', description: 'The user to kick', required: true },
+        { type: 3, name: 'reason', description: 'Reason for the kick', required: false }
       ]
     },
     {
       name: 'ban',
-      description: 'Ban a user',
+      description: 'Ban a user from the server',
       options: [
         { type: 6, name: 'user', description: 'The user to ban', required: true },
-        { type: 3, name: 'reason', description: 'Reason for the ban', required: false }
+        { type: 3, name: 'reason', description: 'Reason for the ban', required: false },
+        { type: 4, name: 'delete_messages', description: 'Days of messages to delete (0-7)', required: false }
       ]
     },
     {
@@ -64,109 +53,190 @@ client.once('ready', () => {
       ]
     },
     {
-      name: 'timeout',
-      description: 'Timeout a user',
+      name: 'warn',
+      description: 'Store a warning for a user',
       options: [
-        { type: 6, name: 'user', description: 'The user to timeout', required: true },
-        { type: 3, name: 'duration', description: 'Duration in minutes', required: true },
-        { type: 3, name: 'reason', description: 'Reason for the timeout', required: false }
+        { type: 6, name: 'user', description: 'The user to warn', required: true },
+        { type: 3, name: 'reason', description: 'Reason for the warning', required: true }
       ]
     },
-    // Leveling command
     {
-      name: 'level',
-      description: 'Check your level or another user\'s level',
+      name: 'warnings',
+      description: 'Show all warnings of a user',
       options: [
         { type: 6, name: 'user', description: 'The user to check (optional)', required: false }
       ]
     },
-    // New Quantum Harmony System - Unique system where users build harmony through positive interactions
     {
-      name: 'harmonize',
-      description: 'Send harmony to a user, building positive energy',
+      name: 'clearwarnings',
+      description: 'Delete all warnings for a user',
       options: [
-        { type: 6, name: 'user', description: 'The user to harmonize with', required: true },
-        { type: 3, name: 'message', description: 'Optional harmony message', required: false }
+        { type: 6, name: 'user', description: 'The user to clear warnings for', required: true }
       ]
     },
     {
-      name: 'harmony',
-      description: 'Check your harmony level or another user\'s',
+      name: 'purge',
+      description: 'Delete 1–100 messages in a channel',
       options: [
-        { type: 6, name: 'user', description: 'The user to check (optional)', required: false }
-      ]
-    },
-    // Setup commands
-    {
-      name: 'setlogchannel',
-      description: 'Set the log channel for events',
-      options: [
-        { type: 7, name: 'channel', description: 'The channel to set as log channel', required: true }
+        { type: 4, name: 'amount', description: 'Number of messages to delete (1-100)', required: true }
       ]
     },
     {
-      name: 'setwarnchannel',
-      description: 'Set the warn channel',
+      name: 'slowmode',
+      description: 'Set slowmode in current channel',
       options: [
-        { type: 7, name: 'channel', description: 'The channel to set as warn channel', required: true }
+        { type: 4, name: 'seconds', description: 'Slowmode delay in seconds (0 to disable)', required: true }
       ]
     },
     {
-      name: 'setbanchannel',
-      description: 'Set the ban channel',
+      name: 'lock',
+      description: 'Lock a channel by blocking @everyone from sending messages',
       options: [
-        { type: 7, name: 'channel', description: 'The channel to set as ban channel', required: true }
+        { type: 7, name: 'channel', description: 'The channel to lock (optional)', required: false }
       ]
     },
     {
-      name: 'settimeoutchannel',
-      description: 'Set the timeout channel',
+      name: 'unlock',
+      description: 'Unlock a locked channel',
       options: [
-        { type: 7, name: 'channel', description: 'The channel to set as timeout channel', required: true }
+        { type: 7, name: 'channel', description: 'The channel to unlock (optional)', required: false }
       ]
     },
     {
-      name: 'setlevelchannel',
-      description: 'Set the level channel',
+      name: 'nickname',
+      description: 'Force-change or reset a user\'s nickname',
       options: [
-        { type: 7, name: 'channel', description: 'The channel to set as level channel', required: true }
+        { type: 6, name: 'user', description: 'The user to change nickname for', required: true },
+        { type: 3, name: 'nickname', description: 'The new nickname (leave empty to reset)', required: false }
       ]
     },
     {
-      name: 'setharmonychannel',
-      description: 'Set the harmony channel',
+      name: 'addrole',
+      description: 'Give any role to a user (permission-safe)',
       options: [
-        { type: 7, name: 'channel', description: 'The channel to set as harmony channel', required: true }
-      ]
-    },
-    // Server management commands (Bot Owner only)
-    {
-      name: 'addserver',
-      description: 'Add a server to the allowed list (Bot Owner only)',
-      options: [
-        { type: 3, name: 'serverid', description: 'The server ID to add', required: true }
+        { type: 6, name: 'user', description: 'The user to add role to', required: true },
+        { type: 8, name: 'role', description: 'The role to add', required: true }
       ]
     },
     {
-      name: 'removeserver',
-      description: 'Remove a server from the allowed list (Bot Owner only)',
+      name: 'removerole',
+      description: 'Remove a role from a user (permission-safe)',
       options: [
-        { type: 3, name: 'serverid', description: 'The server ID to remove', required: true }
+        { type: 6, name: 'user', description: 'The user to remove role from', required: true },
+        { type: 8, name: 'role', description: 'The role to remove', required: true }
       ]
     },
     {
-      name: 'serverlist',
-      description: 'List all allowed servers (Bot Owner only)',
-      options: []
-    },
-    {
-      name: 'addleader',
-      description: 'Add a leader for a server (Bot Owner only)',
+      name: 'modlog',
+      description: 'Show detailed moderation logs of a user',
       options: [
-        { type: 6, name: 'user', description: 'The user to add as leader', required: true },
-        { type: 3, name: 'serverid', description: 'The server ID to add the leader to', required: true }
+        { type: 6, name: 'user', description: 'The user to view logs for', required: true },
+        { type: 4, name: 'limit', description: 'Number of entries to show (1-50)', required: false }
       ]
     },
+    // AI COMMANDS
+    {
+      name: 'respond',
+      description: 'Staff-only AI answer command',
+      options: [
+        { type: 3, name: 'prompt', description: 'The prompt for AI response', required: true },
+        { type: 3, name: 'ai_type', description: 'Type of AI to use', required: true, choices: [
+          { name: 'Basic', value: 'basic' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Technical', value: 'technical' }
+        ]}
+      ]
+    },
+    {
+      name: 'say',
+      description: 'Staff-only force bot to say message',
+      options: [
+        { type: 3, name: 'text', description: 'The message for the bot to say', required: true }
+      ]
+    },
+    {
+      name: 'aisetpersona',
+      description: 'Change AI personality preset',
+      options: [
+        { type: 3, name: 'style', description: 'AI personality style', required: true, choices: [
+          { name: 'Helpful', value: 'helpful' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Professional', value: 'professional' },
+          { name: 'Witty', value: 'witty' }
+        ]}
+      ]
+    },
+    {
+      name: 'aichannel',
+      description: 'Set the channel where AI is allowed',
+      options: [
+        { type: 7, name: 'channel', description: 'The channel for AI commands', required: true }
+      ]
+    },
+    {
+      name: 'aiexplain',
+      description: 'AI explains a topic simply',
+      options: [
+        { type: 3, name: 'topic', description: 'The topic to explain', required: true },
+        { type: 3, name: 'ai_type', description: 'Type of AI to use', required: true, choices: [
+          { name: 'Basic', value: 'basic' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Technical', value: 'technical' }
+        ]}
+      ]
+    },
+    {
+      name: 'aigenerate',
+      description: 'AI generates ideas',
+      options: [
+        { type: 3, name: 'subject', description: 'The subject for idea generation', required: true },
+        { type: 3, name: 'style', description: 'Generation style', required: true, choices: [
+          { name: 'Creative', value: 'creative' },
+          { name: 'Practical', value: 'practical' },
+          { name: 'Innovative', value: 'innovative' }
+        ]},
+        { type: 3, name: 'ai_type', description: 'Type of AI to use', required: true, choices: [
+          { name: 'Basic', value: 'basic' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Technical', value: 'technical' }
+        ]}
+      ]
+    },
+    {
+      name: 'aistory',
+      description: 'AI writes a short story',
+      options: [
+        { type: 3, name: 'length', description: 'Story length', required: true, choices: [
+          { name: 'Short', value: 'short' },
+          { name: 'Medium', value: 'medium' },
+          { name: 'Long', value: 'long' }
+        ]},
+        { type: 3, name: 'ai_type', description: 'Type of AI to use', required: true, choices: [
+          { name: 'Basic', value: 'basic' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Technical', value: 'technical' }
+        ]},
+        { type: 3, name: 'theme', description: 'Story theme (optional)', required: false }
+      ]
+    },
+    {
+      name: 'aidevnotes',
+      description: 'AI creates developer update notes',
+      options: [
+        { type: 3, name: 'changes', description: 'The changes to document', required: true },
+        { type: 3, name: 'style', description: 'Note style', required: true, choices: [
+          { name: 'Formal', value: 'formal' },
+          { name: 'Casual', value: 'casual' },
+          { name: 'Technical', value: 'technical' }
+        ]},
+        { type: 3, name: 'ai_type', description: 'Type of AI to use', required: true, choices: [
+          { name: 'Basic', value: 'basic' },
+          { name: 'Creative', value: 'creative' },
+          { name: 'Technical', value: 'technical' }
+        ]}
+      ]
+    }
+  ]);
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -235,70 +305,34 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Leveling system
-  const xpGain = config.defaultXpPerMessage;
-  await db.updateUserXp(message.author.id, xpGain);
-
-  const userData = await db.getUser(message.author.id);
-  const guildData = await db.getGuild(message.guild.id);
-  if (userData) {
-    const requiredXp = Math.floor(userData.level * config.defaultLevelUpMultiplier * 100);
-    if (userData.xp >= requiredXp) {
-      const newLevel = userData.level + 1;
-      await db.updateUserLevel(message.author.id, newLevel);
-
-      if (guildData && guildData.level_channel_id) {
-        const levelChannel = message.guild.channels.cache.get(guildData.level_channel_id);
-        if (levelChannel) {
-          const embed = new EmbedBuilder()
-            .setTitle('Level Up!')
-            .setColor(0x00ff00)
-            .setDescription(`${message.author} leveled up to level ${newLevel}!`);
-          await levelChannel.send({ embeds: [embed] });
-        }
-      }
-    }
-  }
-
-  // Quantum Harmony System: Auto-harmonize on positive messages
-  const positiveWords = ['thank', 'good', 'great', 'awesome', 'love', 'happy', 'nice', 'cool', 'amazing', 'excellent'];
-  const messageContent = message.content.toLowerCase();
-  if (positiveWords.some(word => messageContent.includes(word))) {
-    // Randomly harmonize nearby users
-    const members = message.guild.members.cache.filter(m => !m.user.bot && m.id !== message.author.id);
-    if (members.size > 0) {
-      const randomMember = members.random();
-      await db.addHarmony(randomMember.id, 1, message.author.id);
-      // Optional: Send a subtle harmony notification
-      const harmonyChannel = message.guild.channels.cache.get(guildData?.harmony_channel_id);
-      if (harmonyChannel) {
-        const embed = new EmbedBuilder()
-          .setTitle('🌟 Quantum Harmony Detected!')
-          .setColor(0xff69b4)
-          .setDescription(`${message.author} shared positive energy, harmonizing ${randomMember}!`)
-          .setFooter({ text: 'Quantum Harmony: Connecting souls through positivity' });
-        await harmonyChannel.send({ embeds: [embed] });
-      }
-    }
-  }
+  // Message handling logic can be added here if needed
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isCommand()) return;
+  if (!interaction.isCommand() && !interaction.isButton()) return;
 
   // Blacklist system removed
 
   const { commandName, options } = interaction;
 
+  // Helper function to check if user is a leader
+  const isLeader = async (userId, guildId) => {
+    return await db.isLeader(userId, guildId);
+  };
+
   // Channel checks
-  const checkChannel = (channelType) => {
+  const checkChannel = async (channelType) => {
     const guildData = db.getGuild(interaction.guild.id);
     if (!guildData) {
       return { valid: false, message: 'Guild not set up. Please use /setlogchannel first.' };
     }
     const channelId = guildData[`${channelType}_channel_id`];
     if (channelId !== interaction.channel.id) {
-      return { valid: false, message: `This command can only be used in the designated ${channelType} channel.` };
+      // Allow leaders to bypass channel restrictions
+      const leader = await isLeader(interaction.user.id, interaction.guild.id);
+      if (!leader) {
+        return { valid: false, message: `This command can only be used in the designated ${channelType} channel.` };
+      }
     }
     return { valid: true };
   };
@@ -306,7 +340,7 @@ client.on('interactionCreate', async (interaction) => {
   try {
     switch (commandName) {
       case 'warn':
-        const warnCheck = checkChannel('warn');
+        const warnCheck = await checkChannel('warn');
         if (!warnCheck.valid) {
           return await interaction.reply({ content: warnCheck.message, ephemeral: true });
         }
@@ -314,9 +348,11 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
         const warnUser = options.getUser('user');
-        const warnReason = options.getString('reason') || 'No reason provided';
-        db.addWarn(warnUser.id);
-        const warns = db.getWarns(warnUser.id);
+        const warnReason = options.getString('reason');
+
+        await db.addWarn(warnUser.id, warnReason, interaction.user.id);
+        const warns = await db.getWarns(warnUser.id);
+
         const warnEmbed = new EmbedBuilder()
           .setTitle('User Warned')
           .setColor(0xffff00)
@@ -324,24 +360,52 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'User', value: warnUser.toString(), inline: true },
             { name: 'Warned By', value: interaction.user.toString(), inline: true },
             { name: 'Reason', value: warnReason, inline: true },
-            { name: 'Total Warns', value: warns.toString(), inline: true }
+            { name: 'Total Warns', value: warns.length.toString(), inline: true }
           );
+
         await interaction.reply({ embeds: [warnEmbed] });
-        if (warns >= config.defaultWarnLimit) {
-          await interaction.guild.members.ban(warnUser, { reason: `Auto-ban: ${warns} warnings` });
-          const banEmbed = new EmbedBuilder()
-            .setTitle('User Auto-Banned')
-            .setColor(0xff0000)
-            .addFields(
-              { name: 'User', value: warnUser.toString(), inline: true },
-              { name: 'Reason', value: `Reached ${warns} warnings`, inline: true }
-            );
-          await interaction.followup({ embeds: [banEmbed] });
+
+        // Send to moderation log if 5 or more warnings
+        if (warns.length >= 5) {
+          const guildData = await db.getGuild(interaction.guild.id);
+          if (guildData && guildData.moderation_log_channel_id) {
+            const modLogChannel = interaction.guild.channels.cache.get(guildData.moderation_log_channel_id);
+            if (modLogChannel) {
+              const modLogEmbed = new EmbedBuilder()
+                .setTitle('⚠️ User Reached 5 Warnings')
+                .setColor(0xffa500)
+                .addFields(
+                  { name: 'User', value: warnUser.toString(), inline: true },
+                  { name: 'Total Warnings', value: warns.length.toString(), inline: true },
+                  { name: 'Latest Reason', value: warnReason, inline: false },
+                  { name: 'Warning History', value: warns.map(w => `• ${w.reason} (${new Date(w.timestamp).toLocaleDateString()})`).join('\n'), inline: false }
+                )
+                .setTimestamp();
+
+              const buttons = new ActionRowBuilder()
+                .addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`mod_ban_${warnUser.id}`)
+                    .setLabel('Ban User')
+                    .setStyle(ButtonStyle.Danger),
+                  new ButtonBuilder()
+                    .setCustomId(`mod_timeout_${warnUser.id}`)
+                    .setLabel('Timeout (1h)')
+                    .setStyle(ButtonStyle.Secondary),
+                  new ButtonBuilder()
+                    .setCustomId(`mod_ignore_${warnUser.id}`)
+                    .setLabel('Ignore')
+                    .setStyle(ButtonStyle.Success)
+                );
+
+              await modLogChannel.send({ embeds: [modLogEmbed], components: [buttons] });
+            }
+          }
         }
         break;
 
       case 'ban':
-        const banCheck = checkChannel('ban');
+        const banCheck = await checkChannel('ban');
         if (!banCheck.valid) {
           return await interaction.reply({ content: banCheck.message, ephemeral: true });
         }
@@ -362,89 +426,258 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({ embeds: [banEmbed] });
         break;
 
-      case 'blacklist':
-        const blacklistCheck = checkChannel('blacklist');
-        if (!blacklistCheck.valid) {
-          return await interaction.reply({ content: blacklistCheck.message, ephemeral: true });
-        }
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
-        }
-        const blacklistUser = options.getUser('user');
-        db.blacklistUser(blacklistUser.id);
-        const blacklistEmbed = new EmbedBuilder()
-          .setTitle('User Blacklisted')
-          .setColor(0x000000)
-          .addFields(
-            { name: 'User', value: blacklistUser.toString(), inline: true },
-            { name: 'Blacklisted By', value: interaction.user.toString(), inline: true }
-          );
-        await interaction.reply({ embeds: [blacklistEmbed] });
-        break;
-
-      case 'unblacklist':
-        const unblacklistCheck = checkChannel('blacklist');
-        if (!unblacklistCheck.valid) {
-          return await interaction.reply({ content: unblacklistCheck.message, ephemeral: true });
-        }
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
-        }
-        const unblacklistUser = options.getUser('user');
-        db.unblacklistUser(unblacklistUser.id);
-        const unblacklistEmbed = new EmbedBuilder()
-          .setTitle('User Unblacklisted')
-          .setColor(0x00ff00)
-          .addFields(
-            { name: 'User', value: unblacklistUser.toString(), inline: true },
-            { name: 'Unblacklisted By', value: interaction.user.toString(), inline: true }
-          );
-        await interaction.reply({ embeds: [unblacklistEmbed] });
-        break;
-
-      case 'timeout':
-        const timeoutCheck = checkChannel('timeout');
-        if (!timeoutCheck.valid) {
-          return await interaction.reply({ content: timeoutCheck.message, ephemeral: true });
-        }
+      case 'mute':
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
-        const timeoutUser = options.getMember('user');
-        const timeoutDuration = options.getString('duration');
-        const timeoutReason = options.getString('reason') || 'No reason provided';
-        const timeoutMs = parseInt(timeoutDuration) * 60 * 1000;
-        await timeoutUser.timeout(timeoutMs, timeoutReason);
-        const timeoutEmbed = new EmbedBuilder()
-          .setTitle('User Timed Out')
+        const muteUser = options.getUser('user');
+        const muteReason = options.getString('reason') || 'No reason provided';
+        const muteDuration = options.getString('duration');
+        const muteMember = options.getMember('user');
+
+        if (!muteMember) {
+          return await interaction.reply({ content: 'User not found in this server.', ephemeral: true });
+        }
+
+        const muteMs = muteDuration ? parseInt(muteDuration) * 60 * 1000 : null;
+        await muteMember.timeout(muteMs, muteReason);
+
+        const muteEmbed = new EmbedBuilder()
+          .setTitle('User Muted')
           .setColor(0xffa500)
           .addFields(
-            { name: 'User', value: timeoutUser.toString(), inline: true },
-            { name: 'Timed Out By', value: interaction.user.toString(), inline: true },
-            { name: 'Duration', value: `${timeoutDuration} minutes`, inline: true },
-            { name: 'Reason', value: timeoutReason, inline: true }
+            { name: 'User', value: muteUser.toString(), inline: true },
+            { name: 'Muted By', value: interaction.user.toString(), inline: true },
+            { name: 'Reason', value: muteReason, inline: true }
           );
-        await interaction.reply({ embeds: [timeoutEmbed] });
+        if (muteDuration) {
+          muteEmbed.addFields({ name: 'Duration', value: `${muteDuration} minutes`, inline: true });
+        }
+        await interaction.reply({ embeds: [muteEmbed] });
         break;
 
-      case 'level':
-        const levelCheck = checkChannel('level');
-        if (!levelCheck.valid) {
-          return await interaction.reply({ content: levelCheck.message, ephemeral: true });
+      case 'unmute':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
-        const levelUser = options.getUser('user') || interaction.user;
-        const levelData = db.getUser(levelUser.id);
-        if (!levelData) {
-          return await interaction.reply({ content: 'User not found in database.', ephemeral: true });
+        const unmuteUser = options.getUser('user');
+        const unmuteReason = options.getString('reason') || 'No reason provided';
+        const unmuteMember = options.getMember('user');
+
+        if (!unmuteMember) {
+          return await interaction.reply({ content: 'User not found in this server.', ephemeral: true });
         }
-        const levelEmbed = new EmbedBuilder()
-          .setTitle(`${levelUser.username}'s Level`)
+
+        await unmuteMember.timeout(null, unmuteReason);
+
+        const unmuteEmbed = new EmbedBuilder()
+          .setTitle('User Unmuted')
           .setColor(0x00ff00)
           .addFields(
-            { name: 'Level', value: levelData.level.toString(), inline: true },
-            { name: 'XP', value: `${levelData.xp}/${Math.floor(levelData.level * config.defaultLevelUpMultiplier * 100)}`, inline: true }
+            { name: 'User', value: unmuteUser.toString(), inline: true },
+            { name: 'Unmuted By', value: interaction.user.toString(), inline: true },
+            { name: 'Reason', value: unmuteReason, inline: true }
           );
-        await interaction.reply({ embeds: [levelEmbed] });
+        await interaction.reply({ embeds: [unmuteEmbed] });
+        break;
+
+      case 'kick':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const kickUser = options.getUser('user');
+        const kickReason = options.getString('reason') || 'No reason provided';
+        const kickMember = options.getMember('user');
+
+        if (!kickMember) {
+          return await interaction.reply({ content: 'User not found in this server.', ephemeral: true });
+        }
+
+        await kickMember.kick(kickReason);
+
+        const kickEmbed = new EmbedBuilder()
+          .setTitle('User Kicked')
+          .setColor(0xffa500)
+          .addFields(
+            { name: 'User', value: kickUser.toString(), inline: true },
+            { name: 'Kicked By', value: interaction.user.toString(), inline: true },
+            { name: 'Reason', value: kickReason, inline: true }
+          );
+        await interaction.reply({ embeds: [kickEmbed] });
+        break;
+
+      case 'clear':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const clearAmount = options.getInteger('amount');
+        const clearUser = options.getUser('user');
+
+        if (clearAmount < 1 || clearAmount > 100) {
+          return await interaction.reply({ content: 'Amount must be between 1 and 100.', ephemeral: true });
+        }
+
+        let messagesToDelete;
+        if (clearUser) {
+          const userMessages = await interaction.channel.messages.fetch({ limit: 100 });
+          messagesToDelete = userMessages.filter(msg => msg.author.id === clearUser.id).first(clearAmount);
+        } else {
+          messagesToDelete = await interaction.channel.messages.fetch({ limit: clearAmount });
+        }
+
+        await interaction.channel.bulkDelete(messagesToDelete, true);
+
+        const clearEmbed = new EmbedBuilder()
+          .setTitle('Messages Cleared')
+          .setColor(0x00ff00)
+          .addFields({ name: 'Amount', value: messagesToDelete.size.toString(), inline: true });
+        if (clearUser) {
+          clearEmbed.addFields({ name: 'From User', value: clearUser.toString(), inline: true });
+        }
+        await interaction.reply({ embeds: [clearEmbed] });
+        break;
+
+      case 'createevent':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const eventName = options.getString('name');
+        const eventDescription = options.getString('description');
+        const eventStartTime = options.getString('starttime');
+        const eventChannel = options.getChannel('channel');
+        const eventLocation = options.getString('location');
+
+        const startDate = new Date(eventStartTime);
+        if (isNaN(startDate.getTime())) {
+          return await interaction.reply({ content: 'Invalid date format. Use YYYY-MM-DD HH:MM', ephemeral: true });
+        }
+
+        const event = await interaction.guild.scheduledEvents.create({
+          name: eventName,
+          scheduledStartTime: startDate,
+          privacyLevel: 2, // Guild only
+          entityType: eventChannel ? 2 : 3, // Voice channel or external
+          description: eventDescription,
+          channel: eventChannel || null,
+          entityMetadata: eventLocation ? { location: eventLocation } : null
+        });
+
+        const eventEmbed = new EmbedBuilder()
+          .setTitle('Event Created')
+          .setColor(0x00ff00)
+          .addFields(
+            { name: 'Name', value: eventName, inline: true },
+            { name: 'Start Time', value: startDate.toLocaleString(), inline: true },
+            { name: 'ID', value: event.id, inline: false }
+          );
+        await interaction.reply({ embeds: [eventEmbed] });
+        break;
+
+      case 'listevents':
+        const events = await interaction.guild.scheduledEvents.fetch();
+        const upcomingEvents = events.filter(event => event.scheduledStartTimestamp > Date.now());
+
+        const eventsEmbed = new EmbedBuilder()
+          .setTitle('Upcoming Events')
+          .setColor(0x00ff00)
+          .setDescription(upcomingEvents.size > 0 ?
+            upcomingEvents.map(event => `**${event.name}**\nID: ${event.id}\nTime: ${new Date(event.scheduledStartTimestamp).toLocaleString()}\n`).join('\n') :
+            'No upcoming events.'
+          );
+        await interaction.reply({ embeds: [eventsEmbed] });
+        break;
+
+      case 'deleteevent':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const eventId = options.getString('eventid');
+
+        try {
+          const event = await interaction.guild.scheduledEvents.fetch(eventId);
+          await event.delete();
+
+          const deleteEventEmbed = new EmbedBuilder()
+            .setTitle('Event Deleted')
+            .setColor(0xff0000)
+            .addFields({ name: 'Event ID', value: eventId, inline: true });
+          await interaction.reply({ embeds: [deleteEventEmbed] });
+        } catch (error) {
+          await interaction.reply({ content: 'Event not found or could not be deleted.', ephemeral: true });
+        }
+        break;
+
+      case 'setwelcome':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const welcomeChannel = options.getChannel('channel');
+        const welcomeMessage = options.getString('message');
+
+        db.addGuild(interaction.guild.id);
+        db.setGuildChannel(interaction.guild.id, 'welcome', welcomeChannel.id);
+        // Store welcome message (you may need to add this to database)
+
+        const welcomeEmbed = new EmbedBuilder()
+          .setTitle('Welcome Message Set')
+          .setColor(0x00ff00)
+          .addFields(
+            { name: 'Channel', value: welcomeChannel.toString(), inline: true },
+            { name: 'Message', value: welcomeMessage, inline: false }
+          );
+        await interaction.reply({ embeds: [welcomeEmbed] });
+        break;
+
+      case 'setautorole':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const autoRole = options.getRole('role');
+
+        db.addGuild(interaction.guild.id);
+        // Store auto role (you may need to add this to database)
+
+        const autoRoleEmbed = new EmbedBuilder()
+          .setTitle('Auto-Role Set')
+          .setColor(0x00ff00)
+          .addFields({ name: 'Role', value: autoRole.toString(), inline: true });
+        await interaction.reply({ embeds: [autoRoleEmbed] });
+        break;
+
+      case 'serverinfo':
+        const serverEmbed = new EmbedBuilder()
+          .setTitle('Server Information')
+          .setColor(0x00ff00)
+          .setThumbnail(interaction.guild.iconURL())
+          .addFields(
+            { name: 'Name', value: interaction.guild.name, inline: true },
+            { name: 'ID', value: interaction.guild.id, inline: true },
+            { name: 'Owner', value: `<@${interaction.guild.ownerId}>`, inline: true },
+            { name: 'Members', value: interaction.guild.memberCount.toString(), inline: true },
+            { name: 'Channels', value: interaction.guild.channels.cache.size.toString(), inline: true },
+            { name: 'Roles', value: interaction.guild.roles.cache.size.toString(), inline: true },
+            { name: 'Created', value: interaction.guild.createdAt.toLocaleDateString(), inline: true }
+          );
+        await interaction.reply({ embeds: [serverEmbed] });
+        break;
+
+      case 'userinfo':
+        const userInfoUser = options.getUser('user') || interaction.user;
+        const userInfoMember = options.getMember('user') || interaction.member;
+
+        const userInfoEmbed = new EmbedBuilder()
+          .setTitle(`${userInfoUser.username}'s Information`)
+          .setColor(0x00ff00)
+          .setThumbnail(userInfoUser.displayAvatarURL())
+          .addFields(
+            { name: 'Username', value: userInfoUser.username, inline: true },
+            { name: 'Discriminator', value: userInfoUser.discriminator, inline: true },
+            { name: 'ID', value: userInfoUser.id, inline: true },
+            { name: 'Joined Discord', value: userInfoUser.createdAt.toLocaleDateString(), inline: true },
+            { name: 'Joined Server', value: userInfoMember ? userInfoMember.joinedAt.toLocaleDateString() : 'N/A', inline: true },
+            { name: 'Roles', value: userInfoMember ? userInfoMember.roles.cache.map(role => role.name).join(', ') : 'N/A', inline: false }
+          );
+        await interaction.reply({ embeds: [userInfoEmbed] });
         break;
 
       case 'setlogchannel':
@@ -452,128 +685,67 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
         const logChannel = options.getChannel('channel');
+        const logType = options.getString('type');
         db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'log', logChannel.id);
+        const channelType = logType === 'general' ? 'log' : logType;
+        db.setGuildChannel(interaction.guild.id, channelType, logChannel.id);
         const logEmbed = new EmbedBuilder()
-          .setTitle('Log Channel Set')
+          .setTitle(`${logType.charAt(0).toUpperCase() + logType.slice(1)} Log Channel Set`)
           .setColor(0x00ff00)
           .addFields({ name: 'Channel', value: logChannel.toString(), inline: true });
         await interaction.reply({ embeds: [logEmbed] });
         break;
 
-      case 'setwarnchannel':
+      case 'setcmdchannel':
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
-        const warnChannel = options.getChannel('channel');
+        const cmdChannel = options.getChannel('channel');
+        const cmdTypeForChannel = options.getString('type');
         db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'warn', warnChannel.id);
-        const warnSetEmbed = new EmbedBuilder()
-          .setTitle('Warn Channel Set')
+        db.setGuildChannel(interaction.guild.id, cmdTypeForChannel, cmdChannel.id);
+        const cmdEmbed = new EmbedBuilder()
+          .setTitle(`${cmdTypeForChannel.charAt(0).toUpperCase() + cmdTypeForChannel.slice(1)} Command Channel Set`)
           .setColor(0x00ff00)
-          .addFields({ name: 'Channel', value: warnChannel.toString(), inline: true });
-        await interaction.reply({ embeds: [warnSetEmbed] });
+          .addFields({ name: 'Channel', value: cmdChannel.toString(), inline: true });
+        await interaction.reply({ embeds: [cmdEmbed] });
         break;
 
-      case 'setbanchannel':
+      case 'configaichannel':
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
-        const banChannel = options.getChannel('channel');
+        const aiChannel = options.getChannel('channel');
+        const aiEnabled = options.getBoolean('enabled');
         db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'ban', banChannel.id);
-        const banSetEmbed = new EmbedBuilder()
-          .setTitle('Ban Channel Set')
-          .setColor(0x00ff00)
-          .addFields({ name: 'Channel', value: banChannel.toString(), inline: true });
-        await interaction.reply({ embeds: [banSetEmbed] });
-        break;
-
-      case 'settimeoutchannel':
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
-        }
-        const timeoutChannel = options.getChannel('channel');
-        db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'timeout', timeoutChannel.id);
-        const timeoutSetEmbed = new EmbedBuilder()
-          .setTitle('Timeout Channel Set')
-          .setColor(0x00ff00)
-          .addFields({ name: 'Channel', value: timeoutChannel.toString(), inline: true });
-        await interaction.reply({ embeds: [timeoutSetEmbed] });
-        break;
-
-      case 'setlevelchannel':
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
-        }
-        const levelChannel = options.getChannel('channel');
-        db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'level', levelChannel.id);
-        const levelSetEmbed = new EmbedBuilder()
-          .setTitle('Level Channel Set')
-          .setColor(0x00ff00)
-          .addFields({ name: 'Channel', value: levelChannel.toString(), inline: true });
-        await interaction.reply({ embeds: [levelSetEmbed] });
-        break;
-
-      case 'harmonize':
-        const harmonyCheck = checkChannel('harmony');
-        if (!harmonyCheck.valid) {
-          return await interaction.reply({ content: harmonyCheck.message, ephemeral: true });
-        }
-        const harmonizeUser = options.getUser('user');
-        const harmonyMessage = options.getString('message') || 'Sending positive harmony!';
-        if (harmonizeUser.id === interaction.user.id) {
-          return await interaction.reply({ content: 'You cannot harmonize yourself!', ephemeral: true });
-        }
-        db.addHarmony(harmonizeUser.id, 1, interaction.user.id);
-        const harmonyEmbed = new EmbedBuilder()
-          .setTitle('🌟 Harmony Sent!')
-          .setColor(0xff69b4)
-          .setDescription(`${interaction.user} sent harmony to ${harmonizeUser}!`)
+        // Store AI channel configuration (you may need to add this to database)
+        const aiEmbed = new EmbedBuilder()
+          .setTitle('AI Channel Configured')
+          .setColor(aiEnabled ? 0x00ff00 : 0xff0000)
           .addFields(
-            { name: 'Message', value: harmonyMessage, inline: false },
-            { name: 'Quantum Entanglement', value: 'Positive energy shared through quantum harmony!', inline: false }
+            { name: 'Channel', value: aiChannel.toString(), inline: true },
+            { name: 'Status', value: aiEnabled ? 'Enabled' : 'Disabled', inline: true }
           );
-        await interaction.reply({ embeds: [harmonyEmbed] });
+        await interaction.reply({ embeds: [aiEmbed] });
         break;
 
-      case 'harmony':
-        const harmonyLevelCheck = checkChannel('harmony');
-        if (!harmonyLevelCheck.valid) {
-          return await interaction.reply({ content: harmonyLevelCheck.message, ephemeral: true });
-        }
-        const harmonyUser = options.getUser('user') || interaction.user;
-        const harmonyData = await db.getHarmony(harmonyUser.id);
-        const lastHarmonized = harmonyData.last_harmonized ? new Date(harmonyData.last_harmonized).toLocaleString() : 'Never';
-        const harmonyLevelEmbed = new EmbedBuilder()
-          .setTitle(`${harmonyUser.username}'s Quantum Harmony`)
-          .setColor(0xff69b4)
-          .addFields(
-            { name: 'Harmony Points', value: harmonyData.harmony_points.toString(), inline: true },
-            { name: 'Last Harmonized', value: lastHarmonized, inline: true }
-          )
-          .setDescription('Quantum Harmony: Building positive connections through shared energy!');
-        await interaction.reply({ embeds: [harmonyLevelEmbed] });
-        break;
-
-      case 'setharmonychannel':
+      case 'setcmdtype':
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
           return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
         }
-        const harmonyChannel = options.getChannel('channel');
+        const cmdTypeChannel = options.getChannel('channel');
+        const cmdTypeForType = options.getString('type');
         db.addGuild(interaction.guild.id);
-        db.setGuildChannel(interaction.guild.id, 'harmony', harmonyChannel.id);
-        const harmonySetEmbed = new EmbedBuilder()
-          .setTitle('Harmony Channel Set')
-          .setColor(0xff69b4)
-          .addFields({ name: 'Channel', value: harmonyChannel.toString(), inline: true });
-        await interaction.reply({ embeds: [harmonySetEmbed] });
+        db.setGuildChannel(interaction.guild.id, cmdTypeForType, cmdTypeChannel.id);
+        const cmdTypeEmbed = new EmbedBuilder()
+          .setTitle(`${cmdTypeForType.charAt(0).toUpperCase() + cmdTypeForType.slice(1)} Command Type Set`)
+          .setColor(0x00ff00)
+          .addFields({ name: 'Channel', value: cmdTypeChannel.toString(), inline: true });
+        await interaction.reply({ embeds: [cmdTypeEmbed] });
         break;
 
       case 'checkwarns':
-        const checkWarnsCheck = checkChannel('warn');
+        const checkWarnsCheck = await checkChannel('warn');
         if (!checkWarnsCheck.valid) {
           return await interaction.reply({ content: checkWarnsCheck.message, ephemeral: true });
         }
@@ -587,7 +759,7 @@ client.on('interactionCreate', async (interaction) => {
         break;
 
       case 'removewarn':
-        const removeWarnCheck = checkChannel('warn');
+        const removeWarnCheck = await checkChannel('warn');
         if (!removeWarnCheck.valid) {
           return await interaction.reply({ content: removeWarnCheck.message, ephemeral: true });
         }
@@ -604,9 +776,12 @@ client.on('interactionCreate', async (interaction) => {
         break;
 
       case 'addserver':
+        console.log(`User ID: ${interaction.user.id}, Owner ID: ${config.ownerId}, Types: User=${typeof interaction.user.id}, Owner=${typeof config.ownerId}`);
         if (interaction.user.id !== config.ownerId) {
+          console.log('Access denied: IDs do not match');
           return await interaction.reply({ content: 'This command is restricted to the bot owner.', ephemeral: true });
         }
+        console.log('Access granted: IDs match');
         const serverIdToAdd = options.getString('serverid');
         await db.addAllowedServer(serverIdToAdd);
         const addServerEmbed = new EmbedBuilder()
@@ -658,13 +833,174 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({ embeds: [addLeaderEmbed] });
         break;
 
+      // AI COMMANDS
+      case 'respond':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const respondPrompt = options.getString('prompt');
+        const respondAiType = options.getString('ai_type');
+        let respondAI;
+        if (respondAiType === 'basic') respondAI = basicAI;
+        else if (respondAiType === 'creative') respondAI = creativeAI;
+        else if (respondAiType === 'technical') respondAI = technicalAI;
+        const respondResponse = respondAI(respondPrompt, 'respond');
+        const respondEmbed = new EmbedBuilder()
+          .setTitle('AI Response')
+          .setColor(0x00ff00)
+          .setDescription(respondResponse)
+          .setFooter({ text: `${respondAiType.charAt(0).toUpperCase() + respondAiType.slice(1)} AI-powered response` });
+        await interaction.reply({ embeds: [respondEmbed] });
+        break;
+
+      case 'say':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const sayText = options.getString('text');
+        await interaction.reply({ content: sayText });
+        break;
+
+      case 'aisetpersona':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const personaStyle = options.getString('style');
+        db.addGuild(interaction.guild.id);
+        await db.setAIPersona(interaction.guild.id, personaStyle);
+        const personaEmbed = new EmbedBuilder()
+          .setTitle('AI Persona Set')
+          .setColor(0x00ff00)
+          .addFields({ name: 'Style', value: personaStyle.charAt(0).toUpperCase() + personaStyle.slice(1), inline: true });
+        await interaction.reply({ embeds: [personaEmbed] });
+        break;
+
+      case 'aichannel':
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this command.', ephemeral: true });
+        }
+        const aiChannelSet = options.getChannel('channel');
+        db.addGuild(interaction.guild.id);
+        db.setGuildChannel(interaction.guild.id, 'ai', aiChannelSet.id);
+        const aiChannelEmbed = new EmbedBuilder()
+          .setTitle('AI Channel Set')
+          .setColor(0x00ff00)
+          .addFields({ name: 'Channel', value: aiChannelSet.toString(), inline: true });
+        await interaction.reply({ embeds: [aiChannelEmbed] });
+        break;
+
+      case 'aiexplain':
+        const explainTopic = options.getString('topic');
+        const explainAiType = options.getString('ai_type');
+        let explainAI;
+        if (explainAiType === 'basic') explainAI = basicAI;
+        else if (explainAiType === 'creative') explainAI = creativeAI;
+        else if (explainAiType === 'technical') explainAI = technicalAI;
+        const explainResponse = explainAI(explainTopic, 'explain');
+        const explainEmbed = new EmbedBuilder()
+          .setTitle('AI Explanation')
+          .setColor(0x00ff00)
+          .setDescription(explainResponse)
+          .setFooter({ text: `${explainAiType.charAt(0).toUpperCase() + explainAiType.slice(1)} AI-powered explanation` });
+        await interaction.reply({ embeds: [explainEmbed] });
+        break;
+
+      case 'aigenerate':
+        const generateSubject = options.getString('subject');
+        const generateStyle = options.getString('style');
+        const generateAiType = options.getString('ai_type');
+        let generateAI;
+        if (generateAiType === 'basic') generateAI = basicAI;
+        else if (generateAiType === 'creative') generateAI = creativeAI;
+        else if (generateAiType === 'technical') generateAI = technicalAI;
+        const generateResponse = generateAI(`${generateSubject} in ${generateStyle} style`, 'generate');
+        const generateEmbed = new EmbedBuilder()
+          .setTitle('AI Idea Generation')
+          .setColor(0x00ff00)
+          .setDescription(generateResponse)
+          .setFooter({ text: `${generateAiType.charAt(0).toUpperCase() + generateAiType.slice(1)} AI-powered generation` });
+        await interaction.reply({ embeds: [generateEmbed] });
+        break;
+
+      case 'aistory':
+        const storyTheme = options.getString('theme') || 'adventure';
+        const storyLength = options.getString('length');
+        const storyAiType = options.getString('ai_type');
+        let storyAI;
+        if (storyAiType === 'basic') storyAI = basicAI;
+        else if (storyAiType === 'creative') storyAI = creativeAI;
+        else if (storyAiType === 'technical') storyAI = technicalAI;
+        const storyResponse = storyAI(`${storyTheme} ${storyLength}`, 'story');
+        const storyEmbed = new EmbedBuilder()
+          .setTitle('AI Story')
+          .setColor(0x00ff00)
+          .setDescription(storyResponse)
+          .setFooter({ text: `${storyAiType.charAt(0).toUpperCase() + storyAiType.slice(1)} AI-generated story` });
+        await interaction.reply({ embeds: [storyEmbed] });
+        break;
+
+      case 'aidevnotes':
+        const devChanges = options.getString('changes');
+        const devStyle = options.getString('style');
+        const devAiType = options.getString('ai_type');
+        let devAI;
+        if (devAiType === 'basic') devAI = basicAI;
+        else if (devAiType === 'creative') devAI = creativeAI;
+        else if (devAiType === 'technical') devAI = technicalAI;
+        const devNotes = devAI(`${devChanges} in ${devStyle} style`, 'devnotes');
+        const devEmbed = new EmbedBuilder()
+          .setTitle('AI Developer Notes')
+          .setColor(0x00ff00)
+          .setDescription(devNotes)
+          .setFooter({ text: `${devAiType.charAt(0).toUpperCase() + devAiType.slice(1)} AI-generated notes` });
+        await interaction.reply({ embeds: [devEmbed] });
+        break;
+
       default:
         await interaction.reply({ content: 'Unknown command.', ephemeral: true });
         break;
     }
+
+    // Handle button interactions
+    if (interaction.isButton()) {
+      const customId = interaction.customId;
+      if (customId.startsWith('mod_')) {
+        const parts = customId.split('_');
+        const action = parts[1];
+        const userId = parts[2];
+
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+          return await interaction.reply({ content: 'You don\'t have permission to use this.', ephemeral: true });
+        }
+
+        try {
+          const targetMember = await interaction.guild.members.fetch(userId);
+          if (!targetMember) {
+            return await interaction.reply({ content: 'User not found in this server.', ephemeral: true });
+          }
+
+          if (action === 'ban') {
+            await interaction.guild.members.ban(targetMember, { reason: 'Reached 5 warnings' });
+            await interaction.reply({ content: `Banned ${targetMember.user.tag}.`, ephemeral: true });
+          } else if (action === 'timeout') {
+            await targetMember.timeout(60 * 60 * 1000, 'Reached 5 warnings');
+            await interaction.reply({ content: `Timed out ${targetMember.user.tag} for 1 hour.`, ephemeral: true });
+          } else if (action === 'ignore') {
+            await interaction.reply({ content: 'Ignored.', ephemeral: true });
+          }
+        } catch (error) {
+          console.error('Error handling button interaction:', error);
+          await interaction.reply({ content: 'An error occurred while processing this action.', ephemeral: true });
+        }
+      }
+    }
   } catch (error) {
     console.error(error);
-    await interaction.reply({ content: 'An error occurred while executing this command.', ephemeral: true });
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: 'An error occurred while executing this command.', ephemeral: true });
+    } else {
+      await interaction.reply({ content: 'An error occurred while executing this command.', ephemeral: true });
+    }
   }
 });
 
@@ -679,4 +1015,3 @@ process.on('SIGINT', () => {
 });
 
 client.login(config.token);
-
